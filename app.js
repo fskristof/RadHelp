@@ -11,7 +11,7 @@
   // nodules: lezárt (kiértékelt) göbök listája ebben a munkamenetben
   // current: éppen felvitel alatt álló göb { locationId, sizeDims, answers, stepIndex, forcedTerminal }
   // sizeDims: [x, y, z] — legfeljebb 3 megadott dimenzió (mm), a legnagyobb számít a javaslatnál
-  let state = { screen: "home", moduleId: null, nodules: [], current: null };
+  let state = { screen: "home", moduleId: null, nodules: [], current: null, report: null };
 
   function maxDim(dims) {
     const nums = (dims || []).filter((v) => v != null && !isNaN(v));
@@ -28,12 +28,12 @@
   }
 
   function goHome() {
-    state = { screen: "home", moduleId: null, nodules: [], current: null };
+    state = { screen: "home", moduleId: null, nodules: [], current: null, report: null };
     render();
   }
 
   function startModule(moduleId) {
-    setState({ screen: "intro", moduleId, nodules: [], current: null });
+    setState({ screen: "intro", moduleId, nodules: [], current: null, report: null });
   }
 
   function freshNodule() {
@@ -42,6 +42,41 @@
 
   function beginNodule() {
     setState({ screen: "location", current: freshNodule() });
+  }
+
+  // --- Strukturált riport modulok (pl. rectum MRI staging) ---
+
+  function beginStructuredReport() {
+    const mod = currentModule();
+    const answers = {};
+    mod.allFields().forEach((f) => {
+      if (f.default !== undefined) answers[f.id] = f.default;
+    });
+    setState({ screen: "section", current: { answers, stepIndex: 0 } });
+  }
+
+  function fieldSatisfied(field, answers) {
+    const val = answers[field.id];
+    if (field.type === "multiselect") return Array.isArray(val) && val.length > 0;
+    if (field.type === "checkbox") return true;
+    return val != null && val !== "";
+  }
+
+  function visibleFields(section, answers) {
+    return section.fields.filter((f) => !f.showIf || f.showIf(answers));
+  }
+
+  function advanceOrFinishSection(mod, answers) {
+    const nextIndex = state.current.stepIndex + 1;
+    if (nextIndex >= mod.sections.length) {
+      finalizeStructuredReport(mod, { ...state.current, answers });
+    } else {
+      setState({ current: { ...state.current, answers, stepIndex: nextIndex } });
+    }
+  }
+
+  function finalizeStructuredReport(mod, report) {
+    setState({ screen: "structured-result", current: null, report });
   }
 
   function selectSingle(mod, question, optionId) {
@@ -129,6 +164,19 @@
       }
       return;
     }
+    if (state.screen === "section") {
+      if (state.current.stepIndex === 0) {
+        setState({ screen: "intro", current: null });
+      } else {
+        setState({ current: { ...state.current, stepIndex: state.current.stepIndex - 1 } });
+      }
+      return;
+    }
+    if (state.screen === "structured-result") {
+      const mod = currentModule();
+      setState({ screen: "section", report: null, current: { answers: state.report.answers, stepIndex: mod.sections.length - 1 } });
+      return;
+    }
     if (state.screen === "intro") {
       goHome();
       return;
@@ -144,7 +192,7 @@
   }
 
   function copyToClipboard(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+    if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard
         .writeText(text)
         .then(() => showToast("Vágólapra másolva"))
@@ -155,20 +203,53 @@
   }
 
   function fallbackCopy(text) {
+    // Safari néhol csendben elutasítja a láthatatlan (opacity:0 / 1px)
+    // elemekről indított másolást, ezért ez a mező a képernyőn kívülre
+    // kerül, de teljes méretű és látható marad.
     const ta = document.createElement("textarea");
     ta.value = text;
     ta.style.position = "fixed";
-    ta.style.opacity = "0";
+    ta.style.top = "0";
+    ta.style.left = "-9999px";
+    ta.style.width = "300px";
+    ta.style.height = "300px";
     document.body.appendChild(ta);
     ta.focus();
     ta.select();
+    ta.setSelectionRange(0, text.length);
+    let ok = false;
     try {
-      document.execCommand("copy");
-      showToast("Vágólapra másolva");
+      ok = document.execCommand("copy");
     } catch (e) {
-      showToast("Másolás sikertelen — jelöld ki kézzel");
+      ok = false;
     }
     document.body.removeChild(ta);
+    if (ok) {
+      showToast("Vágólapra másolva");
+    } else {
+      showManualCopyFallback(text);
+    }
+  }
+
+  // Ha sem a Clipboard API, sem az execCommand másolás nem működik (pl. egyes
+  // mobil böngészőkben vagy beágyazott nézetekben), mutassunk egy kijelölhető
+  // szövegdobozt, hogy kézzel is ki lehessen másolni a leletet.
+  function showManualCopyFallback(text) {
+    const overlay = document.createElement("div");
+    overlay.className = "manual-copy-overlay";
+    overlay.innerHTML = `
+      <div class="manual-copy-box">
+        <p>A másolás automatikusan nem sikerült. Jelöld ki kézzel a szöveget:</p>
+        <textarea readonly></textarea>
+        <button class="btn btn-primary">Bezárás</button>
+      </div>
+    `;
+    overlay.querySelector("textarea").value = text;
+    overlay.querySelector("button").onclick = () => overlay.remove();
+    document.body.appendChild(overlay);
+    const ta = overlay.querySelector("textarea");
+    ta.focus();
+    ta.select();
   }
 
   function buildFullReport(mod) {
@@ -286,6 +367,8 @@
     if (state.screen === "location") return renderLocation();
     if (state.screen === "question") return renderQuestion();
     if (state.screen === "result") return renderResult();
+    if (state.screen === "section") return renderSection();
+    if (state.screen === "structured-result") return renderStructuredResult();
   }
 
   function renderHome() {
@@ -324,9 +407,14 @@
     nav.className = "nav-buttons";
     const startBtn = document.createElement("button");
     startBtn.className = "btn btn-primary";
-    startBtn.textContent = "Kezdés – 1. göb";
     startBtn.style.flex = "1";
-    startBtn.onclick = beginNodule;
+    if (mod.type === "structured") {
+      startBtn.textContent = "Kezdés";
+      startBtn.onclick = beginStructuredReport;
+    } else {
+      startBtn.textContent = "Kezdés – 1. göb";
+      startBtn.onclick = beginNodule;
+    }
     nav.appendChild(startBtn);
     app.appendChild(nav);
   }
@@ -558,7 +646,13 @@
     const copyBtn = document.createElement("button");
     copyBtn.className = "btn btn-primary";
     copyBtn.textContent = "Másolás vágólapra";
-    copyBtn.onclick = () => copyToClipboard(buildFullReport(mod));
+    copyBtn.onclick = () => {
+      try {
+        copyToClipboard(buildFullReport(mod));
+      } catch (e) {
+        showToast("Hiba a lelet összeállításakor: " + e.message);
+      }
+    };
     nav.appendChild(addBtn);
     nav.appendChild(copyBtn);
     app.appendChild(nav);
@@ -569,6 +663,225 @@
     homeBtn.className = "btn btn-secondary";
     homeBtn.textContent = "Kilépés a főoldalra";
     homeBtn.onclick = goHome;
+    nav2.appendChild(homeBtn);
+    app.appendChild(nav2);
+  }
+
+  // --- Generikus mező-motor strukturált riport modulokhoz ---
+
+  function renderFieldControl(container, field, answers, ctx) {
+    const wrap = document.createElement("div");
+    wrap.className = "field-block";
+
+    if (field.type !== "checkbox") {
+      const label = document.createElement("p");
+      label.className = "field-label";
+      label.textContent = field.label + (field.required ? "" : " (opcionális)");
+      wrap.appendChild(label);
+    }
+
+    if (field.type === "select") {
+      const optsWrap = document.createElement("div");
+      optsWrap.className = "options";
+      field.options.forEach((opt) => {
+        const btn = document.createElement("button");
+        const selected = answers[field.id] === opt.id;
+        btn.className = "option-btn" + (selected ? " selected" : "");
+        btn.innerHTML = `<span class="option-check">${selected ? "✓" : ""}</span><span>${opt.label}</span>`;
+        btn.onclick = () => ctx.onDiscreteChange(field.id, opt.id);
+        optsWrap.appendChild(btn);
+      });
+      wrap.appendChild(optsWrap);
+    } else if (field.type === "multiselect") {
+      const optsWrap = document.createElement("div");
+      optsWrap.className = "options";
+      const current = new Set(answers[field.id] || []);
+      field.options.forEach((opt) => {
+        const btn = document.createElement("button");
+        const selected = current.has(opt.id);
+        btn.className = "option-btn" + (selected ? " selected" : "");
+        btn.innerHTML = `<span class="option-check">${selected ? "✓" : ""}</span><span>${opt.label}</span>`;
+        btn.onclick = () => {
+          const set = new Set(answers[field.id] || []);
+          const exclusiveId = field.options.find((o) => o.exclusiveWithOthers)?.id;
+          if (opt.exclusiveWithOthers) {
+            set.clear();
+            set.add(opt.id);
+          } else {
+            set.delete(exclusiveId);
+            if (set.has(opt.id)) set.delete(opt.id);
+            else set.add(opt.id);
+            if (set.size === 0 && exclusiveId) set.add(exclusiveId);
+          }
+          ctx.onDiscreteChange(field.id, Array.from(set));
+        };
+        optsWrap.appendChild(btn);
+      });
+      wrap.appendChild(optsWrap);
+    } else if (field.type === "checkbox") {
+      const selected = !!answers[field.id];
+      const btn = document.createElement("button");
+      btn.className = "option-btn" + (selected ? " selected" : "");
+      btn.innerHTML = `<span class="option-check">${selected ? "✓" : ""}</span><span>${field.label}</span>`;
+      btn.onclick = () => ctx.onDiscreteChange(field.id, !selected);
+      wrap.appendChild(btn);
+    } else if (field.type === "number") {
+      const row = document.createElement("div");
+      row.className = "size-input-row";
+      const val = answers[field.id];
+      row.innerHTML = `<input type="number" inputmode="decimal" min="0" step="0.1" value="${val ?? ""}" />${
+        field.unit ? `<span class="size-unit">${field.unit}</span>` : ""
+      }`;
+      const input = row.querySelector("input");
+      input.oninput = () => ctx.onTextChange(field.id, input.value ? parseFloat(input.value) : undefined);
+      wrap.appendChild(row);
+    } else if (field.type === "textarea") {
+      const ta = document.createElement("textarea");
+      ta.className = "field-textarea";
+      ta.placeholder = field.placeholder || "";
+      ta.value = answers[field.id] || "";
+      ta.oninput = () => ctx.onTextChange(field.id, ta.value);
+      wrap.appendChild(ta);
+    } else {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "field-text-input";
+      input.placeholder = field.placeholder || "";
+      input.value = answers[field.id] || "";
+      input.oninput = () => ctx.onTextChange(field.id, input.value);
+      wrap.appendChild(input);
+    }
+
+    container.appendChild(wrap);
+  }
+
+  function renderSection() {
+    const mod = currentModule();
+    headerTitle.textContent = mod.name;
+    const section = mod.sections[state.current.stepIndex];
+
+    renderProgress(state.current.stepIndex, mod.sections.length);
+
+    const title = document.createElement("h2");
+    title.className = "step-title";
+    title.textContent = section.title;
+    app.appendChild(title);
+
+    const fieldsWrap = document.createElement("div");
+    fieldsWrap.className = "fields-wrap";
+    app.appendChild(fieldsWrap);
+
+    const nav = document.createElement("div");
+    nav.className = "nav-buttons";
+    const nextBtn = document.createElement("button");
+    nextBtn.className = "btn btn-primary";
+    nextBtn.textContent = state.current.stepIndex === mod.sections.length - 1 ? "Lelet összeállítása" : "Tovább";
+    nextBtn.onclick = () => advanceOrFinishSection(mod, state.current.answers);
+    nav.appendChild(nextBtn);
+
+    function updateNextEnabled() {
+      const fields = visibleFields(section, state.current.answers);
+      const ok = fields.every((f) => !f.required || fieldSatisfied(f, state.current.answers));
+      nextBtn.disabled = !ok;
+    }
+
+    function renderFields() {
+      fieldsWrap.innerHTML = "";
+      visibleFields(section, state.current.answers).forEach((field) => {
+        renderFieldControl(fieldsWrap, field, state.current.answers, {
+          onDiscreteChange: (id, value) => {
+            state.current.answers[id] = value;
+            updateNextEnabled();
+            renderFields();
+          },
+          onTextChange: (id, value) => {
+            state.current.answers[id] = value;
+            updateNextEnabled();
+          },
+        });
+      });
+      updateNextEnabled();
+    }
+    renderFields();
+
+    app.appendChild(nav);
+  }
+
+  function renderStructuredResult() {
+    const mod = currentModule();
+    headerTitle.textContent = "Lelet";
+    const answers = state.report.answers;
+    const risk = mod.computeRisk(answers);
+    const summaryLine = mod.buildSummaryLine(answers);
+
+    const card = document.createElement("div");
+    card.className = "result-card " + (risk.level === "high" ? "tr5" : "tr1");
+    card.innerHTML = `
+      <p class="result-label" style="margin-top:0">${summaryLine || "—"}</p>
+      <p class="result-level" style="font-size:22px">${risk.level === "high" ? "MAGAS KOCKÁZAT" : "ALACSONYABB KOCKÁZAT"}</p>
+      <p class="result-label">${risk.label}</p>
+    `;
+    app.appendChild(card);
+
+    const summary = document.createElement("div");
+    summary.className = "summary-box";
+    summary.innerHTML = "<h3>Lelet részletei</h3>";
+    const addRow = (label, val) => {
+      const row = document.createElement("div");
+      row.className = "summary-row";
+      row.innerHTML = label
+        ? `<span class="label">${label}</span><span class="value">${val}</span>`
+        : `<span class="value">${val}</span>`;
+      summary.appendChild(row);
+    };
+    mod.sections.forEach((section) => {
+      if (section.id === "deposits" && mod.buildDepositsLines) {
+        mod.buildDepositsLines(answers).forEach((l) => addRow(null, l));
+        return;
+      }
+      if (section.id === "mstage" && mod.buildMCategoryLines) {
+        mod.buildMCategoryLines(answers).forEach((l) => addRow(null, l));
+        return;
+      }
+      section.fields.forEach((f) => {
+        const val = mod.formatFieldValue(f, answers[f.id]);
+        if (!val) return;
+        addRow(f.type === "checkbox" ? null : f.label, val);
+      });
+    });
+    app.appendChild(summary);
+
+    const nav = document.createElement("div");
+    nav.className = "nav-buttons";
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn btn-secondary";
+    editBtn.textContent = "Szerkesztés";
+    editBtn.onclick = () => setState({ screen: "section", report: null, current: { answers, stepIndex: 0 } });
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "btn btn-primary";
+    copyBtn.textContent = "Másolás vágólapra";
+    copyBtn.onclick = () => {
+      try {
+        copyToClipboard(mod.buildReportText(answers));
+      } catch (e) {
+        showToast("Hiba a lelet összeállításakor: " + e.message);
+      }
+    };
+    nav.appendChild(editBtn);
+    nav.appendChild(copyBtn);
+    app.appendChild(nav);
+
+    const nav2 = document.createElement("div");
+    nav2.className = "nav-buttons";
+    const newBtn = document.createElement("button");
+    newBtn.className = "btn btn-secondary";
+    newBtn.textContent = "Új lelet";
+    newBtn.onclick = beginStructuredReport;
+    const homeBtn = document.createElement("button");
+    homeBtn.className = "btn btn-secondary";
+    homeBtn.textContent = "Kilépés a főoldalra";
+    homeBtn.onclick = goHome;
+    nav2.appendChild(newBtn);
     nav2.appendChild(homeBtn);
     app.appendChild(nav2);
   }

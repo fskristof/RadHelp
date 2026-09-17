@@ -231,6 +231,31 @@ body {
   margin: -8px 0 14px;
 }
 
+/* Strukturált riport modulok generikus mezői */
+.fields-wrap { display: flex; flex-direction: column; gap: 22px; }
+.field-block .options { margin-top: 0; }
+.field-label {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+  font-weight: 500;
+}
+.field-text-input,
+.field-textarea {
+  width: 100%;
+  background: var(--bg-elev);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 13px 16px;
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+}
+.field-textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
 .nav-buttons {
   display: flex;
   gap: 10px;
@@ -424,4 +449,43 @@ body {
 .toast.visible {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+.manual-copy-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+.manual-copy-box {
+  background: var(--bg-elev);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: 18px;
+  max-width: 480px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.manual-copy-box p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.manual-copy-box textarea {
+  width: 100%;
+  height: 260px;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
 }

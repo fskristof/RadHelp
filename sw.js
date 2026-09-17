@@ -1,11 +1,12 @@
-const CACHE_NAME = "radhelp-v15";
+const CACHE_NAME = "radhelp-v17";
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
-  "./app.js?v=11",
+  "./app.js?v=12",
   "./registry.js",
   "./scores/tirads.js",
+  "./scores/rectum-mri.js",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
