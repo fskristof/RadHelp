@@ -167,8 +167,7 @@
   }
 
   // Interaktív, kattintható pajzsmirigy-ábra: 2 lebeny (felső/középső/alsó
-  // harmad) + isthmus (bal/jobb fél). A geometriát fix konstansok írják le,
-  // a lebenyeket egy-egy "stadion" alakú clipPath-tel kerekítjük.
+  // harmad) + isthmus (bal/jobb fél), lekerekített, stilizált kontúrral.
   function buildThyroidDiagramSvg(selectedLocationId) {
     const lobeTop = 30;
     const lobeH = 240;
@@ -180,39 +179,40 @@
     const isthmusY = 150;
     const isthmusH = 60;
     const isthmusGap = 4;
-    const midX = (rightLobeX + lobeW + leftLobeX) / 2; // 200
-
-    const zoneDef = (id, x, y, w, h, extra = "") =>
-      `<rect data-loc="${id}" class="thyroid-zone${selectedLocationId === id ? " selected" : ""}" x="${x}" y="${y}" width="${w}" height="${h}" ${extra}></rect>`;
-
-    const lobeZones = (prefix, x) => `
+    const midX = 200;
+    const rightLobePath = "M143 38 C115 42 89 75 78 113 C65 157 77 205 95 245 C106 269 124 286 142 284 C161 281 170 264 167 239 L160 190 C156 170 158 151 171 133 L164 84 C160 57 154 40 143 38 Z";
+    const leftLobePath = "M257 38 C285 42 311 75 322 113 C335 157 323 205 305 245 C294 269 276 286 258 284 C239 281 230 264 233 239 L240 190 C244 170 242 151 229 133 L236 84 C240 57 246 40 257 38 Z";
+    const zoneClass = (id) => `thyroid-zone${selectedLocationId === id ? " selected" : ""}`;
+    const lobeZones = (prefix) => `
       <g clip-path="url(#clip-${prefix})">
-        ${zoneDef(`${prefix}_felso`, x, lobeTop + gap, lobeW, thirdH - gap * 2)}
-        ${zoneDef(`${prefix}_kozepso`, x, lobeTop + thirdH + gap, lobeW, thirdH - gap * 2)}
-        ${zoneDef(`${prefix}_also`, x, lobeTop + thirdH * 2 + gap, lobeW, thirdH - gap * 2)}
+        <rect data-loc="${prefix}_felso" class="${zoneClass(`${prefix}_felso`)}" x="60" y="34" width="280" height="88" />
+        <rect data-loc="${prefix}_kozepso" class="${zoneClass(`${prefix}_kozepso`)}" x="60" y="122" width="280" height="82" />
+        <rect data-loc="${prefix}_also" class="${zoneClass(`${prefix}_also`)}" x="60" y="204" width="280" height="86" />
       </g>`;
 
     return `
-      <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" class="thyroid-svg">
+      <svg viewBox="0 0 400 330" xmlns="http://www.w3.org/2000/svg" class="thyroid-svg" role="img" aria-label="Pajzsmirigy elölnézeti lokalizációs ábra">
         <defs>
-          <clipPath id="clip-jobb">
-            <rect x="${rightLobeX}" y="${lobeTop}" width="${lobeW}" height="${lobeH}" rx="${lobeW / 2}" />
-          </clipPath>
-          <clipPath id="clip-bal">
-            <rect x="${leftLobeX}" y="${lobeTop}" width="${lobeW}" height="${lobeH}" rx="${lobeW / 2}" />
-          </clipPath>
+          <clipPath id="clip-jobb"><path d="${rightLobePath}" /></clipPath>
+          <clipPath id="clip-bal"><path d="${leftLobePath}" /></clipPath>
         </defs>
 
-        <text x="${rightLobeX + lobeW / 2}" y="18" text-anchor="middle" class="thyroid-label">JOBB</text>
-        <text x="${leftLobeX + lobeW / 2}" y="18" text-anchor="middle" class="thyroid-label">BAL</text>
+        <text x="122" y="20" text-anchor="middle" class="thyroid-label">JOBB</text>
+        <text x="278" y="20" text-anchor="middle" class="thyroid-label">BAL</text>
 
-        ${lobeZones("jobb", rightLobeX)}
-        ${lobeZones("bal", leftLobeX)}
+        <path d="${rightLobePath}" class="thyroid-base" />
+        <path d="${leftLobePath}" class="thyroid-base" />
+        <path data-loc="isthmus_jobb" class="${zoneClass("isthmus_jobb")}" d="M151 142 C166 138 183 138 200 142 L200 188 C183 192 166 192 151 188 C158 171 158 157 151 142 Z" />
+        <path data-loc="isthmus_bal" class="${zoneClass("isthmus_bal")}" d="M249 142 C234 138 217 138 200 142 L200 188 C217 192 234 192 249 188 C242 171 242 157 249 142 Z" />
+        ${lobeZones("jobb")}
+        ${lobeZones("bal")}
 
-        ${zoneDef("isthmus_jobb", rightLobeX + lobeW, isthmusY, midX - isthmusGap - (rightLobeX + lobeW), isthmusH, 'rx="6"')}
-        ${zoneDef("isthmus_bal", midX + isthmusGap, isthmusY, leftLobeX - (midX + isthmusGap), isthmusH, 'rx="6"')}
+        <path d="${rightLobePath}" class="thyroid-outline" />
+        <path d="${leftLobePath}" class="thyroid-outline" />
+        <path d="M151 142 C166 138 183 138 200 142 C217 138 234 138 249 142" class="thyroid-outline thyroid-isthmus-outline" />
+        <path d="M151 188 C166 192 183 192 200 188 C217 192 234 192 249 188" class="thyroid-outline thyroid-isthmus-outline" />
 
-        <text x="200" y="290" text-anchor="middle" class="thyroid-hint">elölnézet</text>
+        <text x="200" y="316" text-anchor="middle" class="thyroid-hint">elölnézet — koppints a lokalizációra</text>
       </svg>
     `;
   }

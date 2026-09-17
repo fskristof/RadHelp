@@ -339,14 +339,28 @@ body {
 .thyroid-zone {
   fill: var(--bg-elev-2);
   stroke: var(--border);
-  stroke-width: 1.5;
+  stroke-width: 2;
   cursor: pointer;
   transition: fill .12s ease;
 }
 .thyroid-zone:active { fill: var(--accent-dark); }
 .thyroid-zone.selected {
   fill: var(--accent);
-  stroke: var(--accent);
+  stroke: #9bceff;
+}
+.thyroid-base {
+  fill: var(--bg-elev-2);
+  stroke: none;
+}
+.thyroid-outline {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.thyroid-isthmus-outline {
+  stroke-width: 2;
 }
 .thyroid-label {
   fill: var(--text-dim);

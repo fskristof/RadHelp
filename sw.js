@@ -1,9 +1,9 @@
-const CACHE_NAME = "radhelp-v5";
+const CACHE_NAME = "radhelp-v11";
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
-  "./app.js",
+  "./app.js?v=11",
   "./registry.js",
   "./scores/tirads.js",
   "./manifest.json",
