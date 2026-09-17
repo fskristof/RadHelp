@@ -247,6 +247,7 @@ body {
 .size-input-row { display: flex; align-items: center; gap: 10px; }
 .size-input-row input[type="number"] {
   flex: 1;
+  min-width: 0;
   background: var(--bg-elev);
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
@@ -254,7 +255,25 @@ body {
   font-size: 17px;
   color: var(--text);
 }
-.size-unit { font-size: 13px; color: var(--text-dim); }
+.size-unit { font-size: 13px; color: var(--text-dim); flex-shrink: 0; }
+
+.dims-row input[type="number"] {
+  text-align: center;
+  padding: 13px 4px;
+}
+.size-input-row input[type="number"]::-webkit-outer-spin-button,
+.size-input-row input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.size-input-row input[type="number"] {
+  -moz-appearance: textfield;
+}
+.dims-sep {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 14px;
+}
 .skip-link {
   background: none;
   border: none;
@@ -338,29 +357,26 @@ body {
 }
 .thyroid-zone {
   fill: var(--bg-elev-2);
-  stroke: var(--border);
-  stroke-width: 2;
+  stroke: none;
   cursor: pointer;
   transition: fill .12s ease;
 }
 .thyroid-zone:active { fill: var(--accent-dark); }
 .thyroid-zone.selected {
   fill: var(--accent);
-  stroke: #9bceff;
 }
-.thyroid-base {
-  fill: var(--bg-elev-2);
-  stroke: none;
-}
-.thyroid-outline {
-  fill: none;
-  stroke: var(--text-dim);
-  stroke-width: 2.5;
-  stroke-linejoin: round;
+.thyroid-dividers line {
+  stroke: var(--border);
+  stroke-width: 1.5;
   pointer-events: none;
 }
-.thyroid-isthmus-outline {
-  stroke-width: 2;
+.thyroid-outline-layer path,
+.thyroid-outline-layer rect {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 7;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
 .thyroid-label {
   fill: var(--text-dim);

@@ -171,8 +171,8 @@
 
     // Strukturált szöveges összegzés egy göbről (vágólapra másoláshoz)
     buildReportText(nodule, index) {
-      const sizeText =
-        nodule.sizeMm != null && !isNaN(nodule.sizeMm) ? `${nodule.sizeMm} mm` : "méret nem megadva";
+      const dims = (nodule.sizeDims || []).filter((v) => v != null && !isNaN(v));
+      const sizeText = dims.length ? `${dims.join(" × ")} mm` : "méret nem megadva";
       const header = `${index}. göb – ${this.locationLabel(nodule.locationId)}, ${sizeText}`;
       const scoreLine = `${nodule.category.level}, malignitási kockázat ${nodule.category.risk}`;
 

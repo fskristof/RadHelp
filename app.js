@@ -9,8 +9,14 @@
   // screen: 'home' | 'intro' | 'location' | 'question' | 'result'
   // moduleId: aktív scoring modul
   // nodules: lezárt (kiértékelt) göbök listája ebben a munkamenetben
-  // current: éppen felvitel alatt álló göb { locationId, sizeMm, answers, stepIndex, forcedTerminal }
+  // current: éppen felvitel alatt álló göb { locationId, sizeDims, answers, stepIndex, forcedTerminal }
+  // sizeDims: [x, y, z] — legfeljebb 3 megadott dimenzió (mm), a legnagyobb számít a javaslatnál
   let state = { screen: "home", moduleId: null, nodules: [], current: null };
+
+  function maxDim(dims) {
+    const nums = (dims || []).filter((v) => v != null && !isNaN(v));
+    return nums.length ? Math.max(...nums) : undefined;
+  }
 
   function setState(patch) {
     state = { ...state, ...patch };
@@ -31,7 +37,7 @@
   }
 
   function freshNodule() {
-    return { locationId: null, sizeMm: undefined, answers: {}, stepIndex: 0, forcedTerminal: null };
+    return { locationId: null, sizeDims: [undefined, undefined, undefined], answers: {}, stepIndex: 0, forcedTerminal: null };
   }
 
   function beginNodule() {
@@ -89,14 +95,17 @@
   function finalizeNodule(mod, nodule) {
     const points = nodule.forcedTerminal ? 0 : computeScore(mod, nodule.answers);
     const category = mod.categorize(points);
-    const recommendation = mod.recommendation(category.level, nodule.sizeMm);
-    const finished = { ...nodule, points, category, recommendation };
+    const sizeMm = maxDim(nodule.sizeDims);
+    const recommendation = mod.recommendation(category.level, sizeMm);
+    const finished = { ...nodule, sizeMm, points, category, recommendation };
     setState({ screen: "result", current: null, nodules: [...state.nodules, finished] });
   }
 
-  function updateLastNoduleSize(mod, sizeMm) {
+  function updateLastNoduleDims(mod, sizeDims) {
     const nodules = [...state.nodules];
     const last = { ...nodules[nodules.length - 1] };
+    const sizeMm = maxDim(sizeDims);
+    last.sizeDims = sizeDims;
     last.sizeMm = sizeMm;
     last.recommendation = mod.recommendation(last.category.level, sizeMm);
     nodules[nodules.length - 1] = last;
@@ -166,53 +175,104 @@
     return state.nodules.map((n, i) => mod.buildReportText(n, i + 1)).join("\n\n");
   }
 
-  // Interaktív, kattintható pajzsmirigy-ábra: 2 lebeny (felső/középső/alsó
-  // harmad) + isthmus (bal/jobb fél), lekerekített, stilizált kontúrral.
+  // 3 mezős méret-bevitel (X × Y × Z mm) — nem kell mindet kitölteni,
+  // a javaslatnál a legnagyobb megadott érték számít.
+  function dimsInputsHtml(idPrefix, dims) {
+    const v = (i) => (dims && dims[i] != null && !isNaN(dims[i]) ? dims[i] : "");
+    return `
+      <div class="size-input-row dims-row">
+        <input type="number" inputmode="decimal" min="0" step="0.1" id="${idPrefix}-0" value="${v(0)}" />
+        <span class="dims-sep">×</span>
+        <input type="number" inputmode="decimal" min="0" step="0.1" id="${idPrefix}-1" value="${v(1)}" />
+        <span class="dims-sep">×</span>
+        <input type="number" inputmode="decimal" min="0" step="0.1" id="${idPrefix}-2" value="${v(2)}" />
+        <span class="size-unit">mm</span>
+      </div>
+    `;
+  }
+
+  function readDimsInputs(idPrefix) {
+    return [0, 1, 2].map((i) => {
+      const el = document.getElementById(`${idPrefix}-${i}`);
+      const val = el && el.value;
+      return val ? parseFloat(val) : undefined;
+    });
+  }
+
+  // Interaktív, kattintható pajzsmirigy-ábra: 2 KÜLÖN lebeny (egymással nem
+  // érintkeznek), amelyeket csak az isthmus köt össze alul. Mindkét lebenyen
+  // belül vékony szektorhatár-vonalak jelölik a felső/középső/alsó harmadot.
   function buildThyroidDiagramSvg(selectedLocationId) {
-    const lobeTop = 30;
-    const lobeH = 240;
-    const lobeW = 90;
-    const thirdH = lobeH / 3;
-    const gap = 3;
-    const rightLobeX = 40; // képen balra = anatómiailag JOBB lebeny
-    const leftLobeX = 270; // képen jobbra = anatómiailag BAL lebeny
-    const isthmusY = 150;
-    const isthmusH = 60;
-    const isthmusGap = 4;
-    const midX = 200;
-    const rightLobePath = "M143 38 C115 42 89 75 78 113 C65 157 77 205 95 245 C106 269 124 286 142 284 C161 281 170 264 167 239 L160 190 C156 170 158 151 171 133 L164 84 C160 57 154 40 143 38 Z";
-    const leftLobePath = "M257 38 C285 42 311 75 322 113 C335 157 323 205 305 245 C294 269 276 286 258 284 C239 281 230 264 233 239 L240 190 C244 170 242 151 229 133 L236 84 C240 57 246 40 257 38 Z";
+    const jobbLobePath =
+      "M110 25 C60 20 28 65 25 120 C22 165 35 210 65 250 C85 272 115 278 140 270 " +
+      "C150 260 152 230 150 200 C148 165 145 130 135 70 C128 40 122 28 110 25 Z";
+    const balLobePath =
+      "M290 25 C340 20 372 65 375 120 C378 165 365 210 335 250 C315 272 285 278 260 270 " +
+      "C250 260 248 230 250 200 C252 165 255 130 265 70 C272 40 278 28 290 25 Z";
+
+    const topY = 25;
+    const bottomY = 274;
+    const thirdY1 = topY + (bottomY - topY) / 3;
+    const thirdY2 = topY + ((bottomY - topY) * 2) / 3;
+
+    // Isthmus: érinti mindkét lebeny mediális szélét, középpontja a középső/alsó
+    // harmad határán van (thirdY2).
+    const isthmusH = 48;
+    const isthmusY = thirdY2 - isthmusH / 2;
+    const isthmusLeftX = 148;
+    const isthmusMidX = 200;
+    const isthmusRightX = 252;
+
     const zoneClass = (id) => `thyroid-zone${selectedLocationId === id ? " selected" : ""}`;
-    const lobeZones = (prefix) => `
-      <g clip-path="url(#clip-${prefix})">
-        <rect data-loc="${prefix}_felso" class="${zoneClass(`${prefix}_felso`)}" x="60" y="34" width="280" height="88" />
-        <rect data-loc="${prefix}_kozepso" class="${zoneClass(`${prefix}_kozepso`)}" x="60" y="122" width="280" height="82" />
-        <rect data-loc="${prefix}_also" class="${zoneClass(`${prefix}_also`)}" x="60" y="204" width="280" height="86" />
+    const zone = (id, x, y, w, h, extra = "") =>
+      `<rect data-loc="${id}" class="${zoneClass(id)}" x="${x}" y="${y}" width="${w}" height="${h}" ${extra}></rect>`;
+
+    const lobeZones = (prefix, clipId) => `
+      <g clip-path="url(#${clipId})">
+        ${zone(`${prefix}_felso`, 0, topY, 400, thirdY1 - topY)}
+        ${zone(`${prefix}_kozepso`, 0, thirdY1, 400, thirdY2 - thirdY1)}
+        ${zone(`${prefix}_also`, 0, thirdY2, 400, bottomY - thirdY2)}
+        <g class="thyroid-dividers">
+          <line x1="0" y1="${thirdY1}" x2="400" y2="${thirdY1}" />
+          <line x1="0" y1="${thirdY2}" x2="400" y2="${thirdY2}" />
+        </g>
       </g>`;
 
+    const isthmusBottomY = isthmusY + isthmusH;
+
     return `
-      <svg viewBox="0 0 400 330" xmlns="http://www.w3.org/2000/svg" class="thyroid-svg" role="img" aria-label="Pajzsmirigy elölnézeti lokalizációs ábra">
+      <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" class="thyroid-svg" role="img" aria-label="Pajzsmirigy elölnézeti lokalizációs ábra">
         <defs>
-          <clipPath id="clip-jobb"><path d="${rightLobePath}" /></clipPath>
-          <clipPath id="clip-bal"><path d="${leftLobePath}" /></clipPath>
+          <clipPath id="clip-jobb"><path d="${jobbLobePath}" /></clipPath>
+          <clipPath id="clip-bal"><path d="${balLobePath}" /></clipPath>
         </defs>
 
-        <text x="122" y="20" text-anchor="middle" class="thyroid-label">JOBB</text>
-        <text x="278" y="20" text-anchor="middle" class="thyroid-label">BAL</text>
+        <text x="95" y="14" text-anchor="middle" class="thyroid-label">JOBB</text>
+        <text x="305" y="14" text-anchor="middle" class="thyroid-label">BAL</text>
 
-        <path d="${rightLobePath}" class="thyroid-base" />
-        <path d="${leftLobePath}" class="thyroid-base" />
-        <path data-loc="isthmus_jobb" class="${zoneClass("isthmus_jobb")}" d="M151 142 C166 138 183 138 200 142 L200 188 C183 192 166 192 151 188 C158 171 158 157 151 142 Z" />
-        <path data-loc="isthmus_bal" class="${zoneClass("isthmus_bal")}" d="M249 142 C234 138 217 138 200 142 L200 188 C217 192 234 192 249 188 C242 171 242 157 249 142 Z" />
-        ${lobeZones("jobb")}
-        ${lobeZones("bal")}
+        <!-- Közös, vastag körvonal-réteg (alul) — a rákerülő kitöltések eltakarják
+             a belső felét, így csak a teljes szerv valódi külső pereme látszik vastagnak. -->
+        <g class="thyroid-outline-layer">
+          <path d="${jobbLobePath}" />
+          <path d="${balLobePath}" />
+          <rect x="${isthmusLeftX}" y="${isthmusY}" width="${isthmusMidX - isthmusLeftX}" height="${isthmusH}" rx="4" />
+          <rect x="${isthmusMidX}" y="${isthmusY}" width="${isthmusRightX - isthmusMidX}" height="${isthmusH}" rx="4" />
+        </g>
 
-        <path d="${rightLobePath}" class="thyroid-outline" />
-        <path d="${leftLobePath}" class="thyroid-outline" />
-        <path d="M151 142 C166 138 183 138 200 142 C217 138 234 138 249 142" class="thyroid-outline thyroid-isthmus-outline" />
-        <path d="M151 188 C166 192 183 192 200 188 C217 192 234 192 249 188" class="thyroid-outline thyroid-isthmus-outline" />
+        ${lobeZones("jobb", "clip-jobb")}
+        ${lobeZones("bal", "clip-bal")}
 
-        <text x="200" y="316" text-anchor="middle" class="thyroid-hint">elölnézet — koppints a lokalizációra</text>
+        ${zone("isthmus_jobb", isthmusLeftX, isthmusY, isthmusMidX - isthmusLeftX, isthmusH, 'rx="4"')}
+        ${zone("isthmus_bal", isthmusMidX, isthmusY, isthmusRightX - isthmusMidX, isthmusH, 'rx="4"')}
+
+        <!-- Vékony elválasztók: isthmus <-> lebeny (fent/lent), és isthmus jobb/bal -->
+        <g class="thyroid-dividers">
+          <line x1="${isthmusLeftX}" y1="${isthmusY}" x2="${isthmusRightX}" y2="${isthmusY}" />
+          <line x1="${isthmusLeftX}" y1="${isthmusBottomY}" x2="${isthmusRightX}" y2="${isthmusBottomY}" />
+          <line x1="${isthmusMidX}" y1="${isthmusY}" x2="${isthmusMidX}" y2="${isthmusBottomY}" />
+        </g>
+
+        <text x="200" y="296" text-anchor="middle" class="thyroid-hint">elölnézet — koppints a lokalizációra</text>
       </svg>
     `;
   }
@@ -294,17 +354,12 @@
 
     const help = document.createElement("p");
     help.className = "step-help";
-    help.textContent = "Add meg a göb legnagyobb átmérőjét és elhelyezkedését. Ez alapján számolja a rendszer a méretfüggő FNA/követési javaslatot, és ez kerül a riport fejlécébe.";
+    help.textContent = "Add meg a göb méretét és elhelyezkedését. Nagyobb göbnél akár 3 dimenziót is megadhatsz — nem kell mindet kitölteni, a javaslatnál a legnagyobb megadott érték számít. Ez kerül a riport fejlécébe.";
     app.appendChild(help);
 
     const wrap = document.createElement("div");
     wrap.className = "size-input-wrap";
-    wrap.innerHTML = `
-      <div class="size-input-row">
-        <input type="number" inputmode="decimal" min="0" step="0.1" id="loc-size-input" placeholder="pl. 18" value="${state.current.sizeMm ?? ""}" />
-        <span class="size-unit">mm</span>
-      </div>
-    `;
+    wrap.innerHTML = dimsInputsHtml("loc-dim", state.current.sizeDims);
     app.appendChild(wrap);
 
     const locTitle = document.createElement("p");
@@ -335,13 +390,12 @@
     const nextBtn = document.createElement("button");
     nextBtn.className = "btn btn-primary";
     nextBtn.textContent = "Tovább a jellemzőkhöz";
-    const sizeVal = document.getElementById("loc-size-input")?.value;
-    nextBtn.disabled = !(state.current.locationId && sizeVal);
+    nextBtn.disabled = !(state.current.locationId && maxDim(readDimsInputs("loc-dim")) != null);
     nextBtn.onclick = () => {
-      const val = document.getElementById("loc-size-input").value;
+      const sizeDims = readDimsInputs("loc-dim");
       setState({
         screen: "question",
-        current: { ...state.current, sizeMm: val ? parseFloat(val) : undefined, stepIndex: 0 },
+        current: { ...state.current, sizeDims, stepIndex: 0 },
       });
     };
     nav.appendChild(nextBtn);
@@ -349,11 +403,14 @@
 
     // Élő validáció + állapot szinkronizálása render nélkül, hogy a beírt érték
     // ne vesszen el, amikor a lokalizáció-választás újrarendereli a képernyőt.
-    const sizeInput = document.getElementById("loc-size-input");
-    sizeInput.oninput = () => {
-      state.current.sizeMm = sizeInput.value ? parseFloat(sizeInput.value) : undefined;
-      nextBtn.disabled = !(state.current.locationId && sizeInput.value);
-    };
+    [0, 1, 2].forEach((i) => {
+      const input = document.getElementById(`loc-dim-${i}`);
+      input.oninput = () => {
+        const dims = readDimsInputs("loc-dim");
+        state.current.sizeDims = dims;
+        nextBtn.disabled = !(state.current.locationId && maxDim(dims) != null);
+      };
+    });
   }
 
   function renderQuestion() {
@@ -449,20 +506,17 @@
 
     const sizeBox = document.createElement("div");
     sizeBox.className = "size-edit-box";
-    sizeBox.innerHTML = `<label>Göb mérete (mm) — módosítható</label>
-      <div class="size-input-row">
-        <input type="number" inputmode="decimal" min="0" step="0.1" id="size-input-2" value="${nodule.sizeMm ?? ""}" placeholder="pl. 18" />
-        <span class="size-unit">mm</span>
-      </div>`;
+    sizeBox.innerHTML = `<label>Göb mérete — módosítható</label>${dimsInputsHtml("res-dim", nodule.sizeDims)}`;
     app.appendChild(sizeBox);
-    document.getElementById("size-input-2").oninput = (e) => {
-      const val = e.target.value;
-      const sizeMm = val ? parseFloat(val) : undefined;
-      updateLastNoduleSize(mod, sizeMm);
-      const updated = state.nodules[state.nodules.length - 1];
-      recBox.querySelector("p").textContent = updated.recommendation.action;
-      recBox.querySelector(".detail").textContent = updated.recommendation.detail;
-    };
+    [0, 1, 2].forEach((i) => {
+      document.getElementById(`res-dim-${i}`).oninput = () => {
+        const sizeDims = readDimsInputs("res-dim");
+        updateLastNoduleDims(mod, sizeDims);
+        const updated = state.nodules[state.nodules.length - 1];
+        recBox.querySelector("p").textContent = updated.recommendation.action;
+        recBox.querySelector(".detail").textContent = updated.recommendation.detail;
+      };
+    });
 
     if (!nodule.forcedTerminal) {
       const summary = document.createElement("div");
