@@ -74,7 +74,15 @@ body {
   font-weight: 600;
 }
 
-.header-spacer { width: 36px; }
+.header-spacer { width: 36px; flex-shrink: 0; }
+
+/* A vissza gomb "hidden" állapotban is foglalja a helyét, hogy a
+   brand-lockup (logó + RadHelp felirat) mindig középen maradjon. */
+#btn-back.hidden {
+  display: flex !important;
+  visibility: hidden;
+  pointer-events: none;
+}
 
 .icon-btn {
   background: none;
