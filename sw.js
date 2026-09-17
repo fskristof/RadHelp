@@ -1,4 +1,4 @@
-const CACHE_NAME = "radhelp-v12";
+const CACHE_NAME = "radhelp-v13";
 const ASSETS = [
   "./",
   "./index.html",
