@@ -166,6 +166,57 @@
     return state.nodules.map((n, i) => mod.buildReportText(n, i + 1)).join("\n\n");
   }
 
+  // Interaktív, kattintható pajzsmirigy-ábra: 2 lebeny (felső/középső/alsó
+  // harmad) + isthmus (bal/jobb fél). A geometriát fix konstansok írják le,
+  // a lebenyeket egy-egy "stadion" alakú clipPath-tel kerekítjük.
+  function buildThyroidDiagramSvg(selectedLocationId) {
+    const lobeTop = 30;
+    const lobeH = 240;
+    const lobeW = 90;
+    const thirdH = lobeH / 3;
+    const gap = 3;
+    const rightLobeX = 40; // képen balra = anatómiailag JOBB lebeny
+    const leftLobeX = 270; // képen jobbra = anatómiailag BAL lebeny
+    const isthmusY = 150;
+    const isthmusH = 60;
+    const isthmusGap = 4;
+    const midX = (rightLobeX + lobeW + leftLobeX) / 2; // 200
+
+    const zoneDef = (id, x, y, w, h, extra = "") =>
+      `<rect data-loc="${id}" class="thyroid-zone${selectedLocationId === id ? " selected" : ""}" x="${x}" y="${y}" width="${w}" height="${h}" ${extra}></rect>`;
+
+    const lobeZones = (prefix, x) => `
+      <g clip-path="url(#clip-${prefix})">
+        ${zoneDef(`${prefix}_felso`, x, lobeTop + gap, lobeW, thirdH - gap * 2)}
+        ${zoneDef(`${prefix}_kozepso`, x, lobeTop + thirdH + gap, lobeW, thirdH - gap * 2)}
+        ${zoneDef(`${prefix}_also`, x, lobeTop + thirdH * 2 + gap, lobeW, thirdH - gap * 2)}
+      </g>`;
+
+    return `
+      <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" class="thyroid-svg">
+        <defs>
+          <clipPath id="clip-jobb">
+            <rect x="${rightLobeX}" y="${lobeTop}" width="${lobeW}" height="${lobeH}" rx="${lobeW / 2}" />
+          </clipPath>
+          <clipPath id="clip-bal">
+            <rect x="${leftLobeX}" y="${lobeTop}" width="${lobeW}" height="${lobeH}" rx="${lobeW / 2}" />
+          </clipPath>
+        </defs>
+
+        <text x="${rightLobeX + lobeW / 2}" y="18" text-anchor="middle" class="thyroid-label">JOBB</text>
+        <text x="${leftLobeX + lobeW / 2}" y="18" text-anchor="middle" class="thyroid-label">BAL</text>
+
+        ${lobeZones("jobb", rightLobeX)}
+        ${lobeZones("bal", leftLobeX)}
+
+        ${zoneDef("isthmus_jobb", rightLobeX + lobeW, isthmusY, midX - isthmusGap - (rightLobeX + lobeW), isthmusH, 'rx="6"')}
+        ${zoneDef("isthmus_bal", midX + isthmusGap, isthmusY, leftLobeX - (midX + isthmusGap), isthmusH, 'rx="6"')}
+
+        <text x="200" y="290" text-anchor="middle" class="thyroid-hint">elölnézet</text>
+      </svg>
+    `;
+  }
+
   function render() {
     btnBack.classList.toggle("hidden", state.screen === "home");
     app.innerHTML = "";
@@ -259,25 +310,25 @@
     const locTitle = document.createElement("p");
     locTitle.className = "step-help";
     locTitle.style.marginTop = "18px";
-    locTitle.textContent = "Lokalizáció:";
+    locTitle.textContent = "Lokalizáció — koppints a göb helyére a pajzsmirigy ábrán:";
     app.appendChild(locTitle);
 
-    const optionsWrap = document.createElement("div");
-    optionsWrap.className = "options";
-    mod.location.options.forEach((opt) => {
-      const btn = document.createElement("button");
-      const selected = state.current.locationId === opt.id;
-      btn.className = "option-btn" + (selected ? " selected" : "");
-      btn.innerHTML = `
-        <span class="option-check">${selected ? "✓" : ""}</span>
-        <span>${opt.label}</span>
-      `;
-      btn.onclick = () => {
-        setState({ current: { ...state.current, locationId: opt.id } });
-      };
-      optionsWrap.appendChild(btn);
+    const diagramWrap = document.createElement("div");
+    diagramWrap.className = "thyroid-diagram-wrap";
+    diagramWrap.innerHTML = buildThyroidDiagramSvg(state.current.locationId);
+    diagramWrap.addEventListener("click", (e) => {
+      const zone = e.target.closest("[data-loc]");
+      if (!zone) return;
+      setState({ current: { ...state.current, locationId: zone.getAttribute("data-loc") } });
     });
-    app.appendChild(optionsWrap);
+    app.appendChild(diagramWrap);
+
+    const selectedLabel = document.createElement("p");
+    selectedLabel.className = "thyroid-selected-label";
+    selectedLabel.textContent = state.current.locationId
+      ? `Kiválasztva: ${mod.locationLabel(state.current.locationId)}`
+      : "Még nincs kiválasztva göb-elhelyezkedés";
+    app.appendChild(selectedLabel);
 
     const nav = document.createElement("div");
     nav.className = "nav-buttons";

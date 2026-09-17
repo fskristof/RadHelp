@@ -52,11 +52,25 @@ body {
   margin: 0 auto;
 }
 
+.brand-lockup {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.brand-logo {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
 .header-inner h1 {
   font-size: 16px;
   margin: 0;
-  flex: 1;
-  text-align: center;
   font-weight: 600;
 }
 
@@ -311,6 +325,46 @@ body {
   margin-bottom: 16px;
 }
 .size-edit-box label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 8px; }
+
+.thyroid-diagram-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+.thyroid-svg {
+  width: 100%;
+  max-width: 340px;
+  touch-action: manipulation;
+}
+.thyroid-zone {
+  fill: var(--bg-elev-2);
+  stroke: var(--border);
+  stroke-width: 1.5;
+  cursor: pointer;
+  transition: fill .12s ease;
+}
+.thyroid-zone:active { fill: var(--accent-dark); }
+.thyroid-zone.selected {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+.thyroid-label {
+  fill: var(--text-dim);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .05em;
+}
+.thyroid-hint {
+  fill: var(--text-dim);
+  font-size: 11px;
+  font-style: italic;
+}
+.thyroid-selected-label {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 0 20px;
+}
 
 .toast {
   position: fixed;
